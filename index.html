@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Intelligent CPU Scheduler Simulator — Animated</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --accent:#6ee7b7;
+      --accent-dark:#16a34a;
+      --muted:#94a3b8;
+      --glass: rgba(255,255,255,0.03);
+      --idle-bg: rgba(255,255,255,0.06);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg,#071029 0%, #082031 100%);
+      color:#e6eef8;
+      padding:18px;
+    }
+    header{ text-align:center; margin-bottom:18px;}
+    header h1{margin:0; font-size:1.6rem;}
+    .sub{color:var(--muted); margin-top:6px}
+    .container{
+      display:grid;
+      grid-template-columns: 380px 1fr;
+      gap:18px;
+      align-items:start;
+    }
+    .card{
+      background:var(--card);
+      padding:14px;
+      border-radius:12px;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+    }
+    .left .card + .card { margin-top:12px; }
+    label{display:block; font-size:0.9rem; margin-bottom:8px; color:var(--muted)}
+    input[type=number], select{
+      width:100%;
+      padding:8px;
+      margin-top:4px;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.04);
+      background:var(--glass);
+      color:inherit;
+    }
+    .row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap}
+    .btn{
+      padding:8px 12px;
+      border-radius:8px;
+      border:0;
+      cursor:pointer;
+      background:rgba(255,255,255,0.03);
+      color:var(--muted);
+    }
+    .btn.primary{ background: linear-gradient(90deg,var(--accent),#60a5fa); color:#042; font-weight:600;}
+    .btn.secondary{ background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--muted); }
+    .process-list{max-height:220px; overflow:auto; padding-top:8px}
+    .process-item{
+      display:flex; justify-content:space-between; align-items:center;
+      border-radius:8px; padding:8px; margin-bottom:8px; background:rgba(255,255,255,0.02);
+    }
+    .process-item span{font-size:0.9rem}
+    .process-actions button{margin-left:6px; font-size:0.8rem; padding:6px;}
+    .gantt-wrapper{ display:flex; flex-direction:column; gap:8px;}
+    .gantt-container{
+      margin-top:8px;
+      min-height:80px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:8px;
+      padding:8px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      position:relative;
+    }
+    .gantt-seg{
+      position:relative;
+      height:36px;
+      border-radius:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:600;
+      font-size:0.85rem;
+      color:#042;
+      padding:0 6px;
+      min-width:18px;
+      overflow:hidden;
+    }
+    .gantt-seg .fill {
+      position:absolute;
+      left:0; top:0; bottom:0;
+      width:0%;
+      background:linear-gradient(90deg, rgba(0,0,0,0.08), rgba(0,0,0,0.03));
+      mix-blend-mode:overlay;
+      transition: width 0.08s linear;
+    }
+    .idle{ background:var(--idle-bg); color:#9aa8b3; }
+    .pid{ background:var(--accent); }
+    .pid.running{ box-shadow: 0 4px 12px rgba(0,0,0,0.45) inset; transform: translateY(-2px); }
+    .metrics p{margin:6px 0; color:var(--muted)}
+    table{width:100%; border-collapse:collapse; margin-top:8px}
+    th,td{padding:8px; text-align:center; font-size:0.85rem; border-bottom:1px solid rgba(255,255,255,0.03)}
+    thead th{color:var(--muted); font-weight:600}
+    tr.highlight{ background: linear-gradient(90deg, rgba(110,231,183,0.06), rgba(96,165,250,0.04)); }
+    .controls-inline{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap }
+    .speed-control{ display:flex; gap:6px; align-items:center; color:var(--muted) }
+    .speed-control input[type=range]{ width:140px; }
+    footer{text-align:center; margin-top:12px; color:var(--muted)}
+    /* Responsive */
+    @media (max-width:900px){
+      .container{grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Intelligent CPU Scheduler Simulator</h1>
+    <p class="sub">FCFS | SJF (non-preemptive) | Round Robin | Priority (non-preemptive) — Animated</p>
+  </header>
+
+  <main class="container">
+    <section class="left">
+      <div class="card">
+        <h2>Add Process</h2>
+        <form id="processForm">
+          <label>Arrival Time: <input type="number" id="arrival" min="0" value="0" required></label>
+          <label>Burst Time: <input type="number" id="burst" min="1" value="1" required></label>
+          <label>Priority (lower = higher priority): <input type="number" id="priority" min="0" value="0" required></label>
+          <div class="row">
+            <button type="submit" class="btn primary">Add Process</button>
+            <button type="button" id="clearAll" class="btn secondary">Clear All</button>
+            <button type="button" id="demoBtn" class="btn">Demo</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Processes</h2>
+        <div id="processList" class="process-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>Controls</h2>
+        <label for="algo">Algorithm:
+          <select id="algo">
+            <option value="FCFS">FCFS</option>
+            <option value="SJF">SJF (Non-preemptive)</option>
+            <option value="RR">Round Robin</option>
+            <option value="PRIO">Priority (Non-preemptive)</option>
+          </select>
+        </label>
+        <label for="quantum">Time Quantum (for RR): <input id="quantum" type="number" min="1" value="2"></label>
+        <div class="row">
+          <button id="runBtn" class="btn primary">Run Simulation</button>
+          <button id="resetBtn" class="btn">Reset</button>
+          <button id="exportBtn" class="btn secondary">Export CSV</button>
+        </div>
+
+        <div class="controls-inline">
+          <div id="playControls" style="display:none;">
+            <button id="playPauseBtn" class="btn">Play</button>
+            <button id="stopBtn" class="btn secondary">Stop</button>
+          </div>
+          <div class="speed-control">
+            <label for="speedRange">Speed:</label>
+            <input id="speedRange" type="range" min="25" max="200" value="100">
+            <span id="speedLabel">1.00×</span>
+          </div>
+          <label style="margin-left:auto;color:var(--muted)"><input id="autoPlay" type="checkbox"> Auto-play on Run</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="right">
+      <div class="card gantt-wrapper">
+        <h2>Gantt Chart</h2>
+        <div id="ganttContainer" class="gantt-container" aria-live="polite"></div>
+        <div style="color:var(--muted); font-size:0.85rem; margin-top:6px;">Tip: Press <strong>Play</strong> to animate the execution timeline.</div>
+      </div>
+
+      <div class="card">
+        <h2>Metrics</h2>
+        <div id="metrics" class="metrics">
+          <p>Average Waiting Time: <span id="avgWaiting">-</span></p>
+          <p>Average Turnaround Time: <span id="avgTurnaround">-</span></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Process Table</h2>
+        <table id="resultTable">
+          <thead>
+            <tr>
+              <th>PID</th><th>Arrival</th><th>Burst</th><th>Priority</th><th>Start</th><th>Finish</th><th>Waiting</th><th>Turnaround</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Made for CSE316 — Animated CPU Scheduler Simulator</small>
+  </footer>
+
+  <script>
+    // Animated CPU Scheduler Simulator
+    let processes = [];
+    let nextPid = 1;
+
+    // DOM refs
+    const arrivalInput = document.getElementById('arrival');
+    const burstInput = document.getElementById('burst');
+    const prioInput = document.getElementById('priority');
+    const processForm = document.getElementById('processForm');
+    const processList = document.getElementById('processList');
+    const runBtn = document.getElementById('runBtn');
+    const clearAll = document.getElementById('clearAll');
+    const resetBtn = document.getElementById('resetBtn');
+    const algoSelect = document.getElementById('algo');
+    const quantumInput = document.getElementById('quantum');
+    const ganttContainer = document.getElementById('ganttContainer');
+    const avgWaitingEl = document.getElementById('avgWaiting');
+    const avgTurnEl = document.getElementById('avgTurnaround');
+    const resultTableBody = document.querySelector('#resultTable tbody');
+    const demoBtn = document.getElementById('demoBtn');
+    const exportBtn = document.getElementById('exportBtn');
+
+    const playControls = document.getElementById('playControls');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const speedRange = document.getElementById('speedRange');
+    const speedLabel = document.getElementById('speedLabel');
+    const autoPlayCheckbox = document.getElementById('autoPlay');
+
+    // Animation state
+    let currentTimeline = [];
+    let animationState = {
+      playing: false,
+      speed: 1.0,
+      startRealTime: null,
+      simStartTime: 0,
+      simCursor: 0, // simulation time (logical)
+      segIndex: 0,
+      segProgress: 0 // seconds into current segment
+    };
+    let animTimer = null;
+
+    // Helpers for UI
+    function renderProcessList(){
+      processList.innerHTML = '';
+      processes.sort((a,b)=>a.pid-b.pid);
+      processes.forEach(p=>{
+        const div = document.createElement('div');
+        div.className = 'process-item';
+        div.innerHTML = `<span>P${p.pid} — A:${p.arrival} B:${p.origBurst} Pr:${p.priority}</span>
+          <div class="process-actions">
+            <button onclick="editProcess(${p.pid})">Edit</button>
+            <button onclick="removeProcess(${p.pid})">Remove</button>
+          </div>`;
+        processList.appendChild(div);
+      });
+    }
+
+    window.editProcess = function(pid){
+      const p = processes.find(x=>x.pid===pid);
+      if(!p) return;
+      arrivalInput.value = p.arrival;
+      burstInput.value = p.origBurst;
+      prioInput.value = p.priority;
+      removeProcess(pid);
+    };
+
+    window.removeProcess = function(pid){
+      processes = processes.filter(p=>p.pid!==pid);
+      renderProcessList();
+    };
+
+    processForm.addEventListener('submit', e=>{
+      e.preventDefault();
+      const arrival = Math.max(0, Number(arrivalInput.value));
+      const burst = Math.max(1, Number(burstInput.value));
+      const priority = Number(prioInput.value);
+      processes.push({ pid: nextPid++, arrival, burst, priority, origBurst: burst });
+      arrivalInput.value = 0; burstInput.value = 1; prioInput.value = 0;
+      renderProcessList();
+    });
+
+    clearAll.addEventListener('click', ()=>{
+      processes = []; nextPid = 1; renderProcessList();
+    });
+
+    resetBtn.addEventListener('click', ()=>{
+      stopAnimation();
+      processes = []; nextPid = 1; renderProcessList();
+      ganttContainer.innerHTML = ''; avgWaitingEl.textContent = '-'; avgTurnEl.textContent='-';
+      resultTableBody.innerHTML = '';
+      hidePlayControls();
+    });
+
+    demoBtn.addEventListener('click', ()=>{
+      // Example processes: mixed arrivals, will show idle, preemption (RR), priority differences
+      processes = [
+        { pid: nextPid++, arrival: 0, burst: 5, priority: 2, origBurst: 5 },
+        { pid: nextPid++, arrival: 1, burst: 3, priority: 1, origBurst: 3 },
+        { pid: nextPid++, arrival: 2, burst: 8, priority: 3, origBurst: 8 },
+        { pid: nextPid++, arrival: 4, burst: 2, priority: 0, origBurst: 2 }
+      ];
+      renderProcessList();
+    });
+
+    speedRange.addEventListener('input', ()=>{
+      const val = Number(speedRange.value);
+      animationState.speed = val / 100;
+      speedLabel.textContent = animationState.speed.toFixed(2) + '×';
+    });
+
+    exportBtn.addEventListener('click', exportCSV);
+
+    runBtn.addEventListener('click', ()=>{
+      if(processes.length === 0){
+        alert('Add at least one process.');
+        return;
+      }
+      stopAnimation();
+      const algo = algoSelect.value;
+      const quantum = Math.max(1, Number(quantumInput.value) || 1);
+      const ps = processes.map(p=>({ ...p, burst: p.origBurst }));
+      if(algo === 'FCFS') currentTimeline = simulateFCFS(ps);
+      else if(algo === 'SJF') currentTimeline = simulateSJF(ps);
+      else if(algo === 'RR') currentTimeline = simulateRR(ps, quantum);
+      else if(algo === 'PRIO') currentTimeline = simulatePRIO(ps);
+      else currentTimeline = [];
+      renderGantt(currentTimeline);
+      renderMetrics(currentTimeline);
+      showPlayControls();
+      resetAnimationState(currentTimeline);
+      if(autoPlayCheckbox.checked) startAnimation();
+    });
+
+    playPauseBtn.addEventListener('click', ()=>{
+      if(animationState.playing) pauseAnimation();
+      else startAnimation();
+    });
+
+    stopBtn.addEventListener('click', ()=>{
+      stopAnimation();
+      resetGanttFill();
+      unhighlightAllRows();
+    });
+
+    // ---------- Scheduling algorithms ----------
+    function simulateFCFS(ps){
+      ps.sort((a,b)=> a.arrival - b.arrival || a.pid - b.pid );
+      const timeline = [];
+      let time = 0;
+      ps.forEach(p=>{
+        if(time < p.arrival){
+          timeline.push({ pid: 'Idle', start: time, end: p.arrival, duration: p.arrival - time });
+          time = p.arrival;
+        }
+        timeline.push({ pid: 'P'+p.pid, start: time, end: time + p.burst, pidNum:p.pid, duration: p.burst });
+        time += p.burst;
+      });
+      return timeline;
+    }
+
+    function simulateSJF(ps){
+      const timeline = [];
+      let time = 0;
+      const remaining = ps.map(p=>({ ...p }));
+      while(remaining.length){
+        const arrived = remaining.filter(p => p.arrival <= time);
+        if(arrived.length === 0){
+          const nextArr = Math.min(...remaining.map(r=>r.arrival));
+          timeline.push({ pid: 'Idle', start: time, end: nextArr, duration: nextArr - time });
+          time = nextArr;
+          continue;
+        }
+        arrived.sort((a,b)=> a.burst - b.burst || a.arrival - b.arrival || a.pid - b.pid);
+        const chosen = arrived[0];
+        timeline.push({ pid: 'P'+chosen.pid, start: time, end: time + chosen.burst, pidNum:chosen.pid, duration: chosen.burst });
+        time += chosen.burst;
+        const idx = remaining.findIndex(r=>r.pid===chosen.pid);
+        remaining.splice(idx,1);
+      }
+      return timeline;
+    }
+
+    function simulateRR(ps, quantum){
+      const timeline = [];
+      let time = 0;
+      const queue = [];
+      const remaining = ps.map(p=>({ ...p }));
+      remaining.sort((a,b)=>a.arrival - b.arrival || a.pid - b.pid);
+      while(remaining.length || queue.length){
+        while(remaining.length && remaining[0].arrival <= time){
+          queue.push(remaining.shift());
+        }
+        if(queue.length === 0){
+          if(remaining.length){
+            const next = remaining[0].arrival;
+            timeline.push({ pid: 'Idle', start: time, end: next, duration: next - time });
+            time = next;
+            continue;
+          } else break;
+        }
+        const proc = queue.shift();
+        const exec = Math.min(quantum, proc.burst);
+        timeline.push({ pid: 'P'+proc.pid, start: time, end: time+exec, pidNum: proc.pid, duration: exec });
+        proc.burst -= exec;
+        time += exec;
+        while(remaining.length && remaining[0].arrival <= time){
+          queue.push(remaining.shift());
+        }
+        if(proc.burst > 0){
+          queue.push(proc);
+        }
+      }
+      return timeline;
+    }
+
+    function simulatePRIO(ps){
+      const timeline = [];
+      let time = 0;
+      const remaining = ps.map(p=>({ ...p }));
+      while(remaining.length){
+        const arrived = remaining.filter(p => p.arrival <= time);
+        if(arrived.length === 0){
+          const nextArr = Math.min(...remaining.map(r=>r.arrival));
+          timeline.push({ pid: 'Idle', start: time, end: nextArr, duration: nextArr - time });
+          time = nextArr;
+          continue;
+        }
+        arrived.sort((a,b)=> a.priority - b.priority || a.arrival - b.arrival || a.pid - b.pid);
+        const chosen = arrived[0];
+        timeline.push({ pid: 'P'+chosen.pid, start: time, end: time + chosen.burst, pidNum:chosen.pid, duration: chosen.burst });
+        time += chosen.burst;
+        const idx = remaining.findIndex(r=>r.pid===chosen.pid);
+        remaining.splice(idx,1);
+      }
+      return timeline;
+    }
+
+    // ---------- Visualization & metrics ----------
+    function renderGantt(timeline){
+      ganttContainer.innerHTML = '';
+      if(!timeline || timeline.length===0) return;
+      const total = Math.max(1, timeline[timeline.length-1].end - timeline[0].start);
+      // container width for ease
+      timeline.forEach((seg, idx)=>{
+        const segEl = document.createElement('div');
+        segEl.className = 'gantt-seg ' + (seg.pid === 'Idle' ? 'idle' : 'pid');
+        const widthPercent = ((seg.end - seg.start) / total) * 100;
+        segEl.style.minWidth = Math.max(18, widthPercent * 6) + 'px';
+        segEl.style.flex = `0 0 ${Math.max(8, widthPercent)}%`;
+        segEl.title = `${seg.pid} [${seg.start} → ${seg.end}]`;
+        segEl.dataset.index = idx;
+        segEl.dataset.start = seg.start;
+        segEl.dataset.end = seg.end;
+        segEl.dataset.duration = seg.duration;
+        // content
+        segEl.innerHTML = `<div style="position:relative;z-index:2">${seg.pid === 'Idle' ? 'Idle' : seg.pid}</div><div class="fill"></div>`;
+        ganttContainer.appendChild(segEl);
+      });
+    }
+
+    function resetGanttFill(){
+      const fills = ganttContainer.querySelectorAll('.gantt-seg .fill');
+      fills.forEach(f=> f.style.width = '0%');
+      const segs = ganttContainer.querySelectorAll('.gantt-seg');
+      segs.forEach(s => s.classList.remove('running'));
+    }
+
+    function renderMetrics(timeline){
+      const records = {};
+      timeline.forEach(seg=>{
+        if(seg.pid === 'Idle') return;
+        const pid = seg.pidNum;
+        if(!records[pid]) records[pid] = { pid, arrival: null, burst: 0, start: seg.start, finish: seg.end };
+        if(records[pid].start > seg.start) records[pid].start = seg.start;
+        if(records[pid].finish < seg.end) records[pid].finish = seg.end;
+      });
+      processes.forEach(p=>{
+        if(!records[p.pid]) {
+          records[p.pid] = { pid: p.pid, arrival: p.arrival, burst: p.origBurst, start: null, finish: null };
+        } else {
+          records[p.pid].arrival = p.arrival;
+          records[p.pid].burst = p.origBurst;
+        }
+      });
+      const recList = Object.values(records).sort((a,b)=>a.pid-b.pid);
+      let totalWaiting = 0, totalTurn = 0, count=0;
+      resultTableBody.innerHTML = '';
+      recList.forEach(r=>{
+        const finish = r.finish == null ? 0 : r.finish;
+        const start = r.start == null ? r.arrival : r.start;
+        const turnaround = finish - r.arrival;
+        const waiting = turnaround - r.burst;
+        totalWaiting += waiting;
+        totalTurn += turnaround;
+        count++;
+        const tr = document.createElement('tr');
+        tr.id = `proc-row-${r.pid}`;
+        tr.innerHTML = `<td>P${r.pid}</td><td>${r.arrival}</td><td>${r.burst}</td><td>${getPriorityByPid(r.pid)}</td>
+          <td>${start}</td><td>${finish}</td><td>${waiting}</td><td>${turnaround}</td>`;
+        resultTableBody.appendChild(tr);
+      });
+      avgWaitingEl.textContent = (count>0) ? (totalWaiting/count).toFixed(2) : '-';
+      avgTurnEl.textContent = (count>0) ? (totalTurn/count).toFixed(2) : '-';
+    }
+
+    function getPriorityByPid(pid){
+      const p = processes.find(x=>x.pid===pid);
+      return p ? p.priority : '-';
+    }
+
+    // ---------- Animation control ----------
+    function resetAnimationState(timeline){
+      animationState.playing = false;
+      animationState.startRealTime = null;
+      animationState.simStartTime = timeline.length ? timeline[0].start : 0;
+      animationState.simCursor = animationState.simStartTime;
+      animationState.segIndex = 0;
+      animationState.segProgress = 0;
+      animationState.speed = Number(speedRange.value) / 100;
+      speedLabel.textContent = animationState.speed.toFixed(2) + '×';
+      resetGanttFill();
+      unhighlightAllRows();
+      updatePlayButton();
+    }
+
+    function startAnimation(){
+      if(!currentTimeline || currentTimeline.length === 0) return;
+      if(animationState.playing) return;
+      animationState.playing = true;
+      animationState.startRealTime = performance.now();
+      animationState.simCursor = animationState.simCursor || animationState.simStartTime;
+      updatePlayButton();
+      tickAnimation();
+    }
+
+    function pauseAnimation(){
+      animationState.playing = false;
+      updatePlayButton();
+      // no need to cancel requestAnimationFrame because tickAnimation checks playing
+    }
+
+    function stopAnimation(){
+      animationState.playing = false;
+      animationState.startRealTime = null;
+      animationState.simCursor = animationState.simStartTime;
+      animationState.segIndex = 0;
+      animationState.segProgress = 0;
+      updatePlayButton();
+      if(animTimer) { cancelAnimationFrame(animTimer); animTimer = null; }
+    }
+
+    function updatePlayButton(){
+      playControls.style.display = currentTimeline && currentTimeline.length ? 'flex' : 'none';
+      playPauseBtn.textContent = animationState.playing ? 'Pause' : 'Play';
+    }
+
+    function showPlayControls(){ playControls.style.display = 'flex'; }
+    function hidePlayControls(){ playControls.style.display = 'none'; }
+
+    function tickAnimation(){
+      if(!animationState.playing) return;
+      const now = performance.now();
+      const dtReal = (now - (animationState.lastRealTime || now)) / 1000; // in seconds
+      animationState.lastRealTime = now;
+      const dtSim = dtReal * animationState.speed;
+      animationState.simCursor += dtSim;
+      // advance through segments based on simCursor
+      while(animationState.segIndex < currentTimeline.length && animationState.simCursor >= currentTimeline[animationState.segIndex].end){
+        // fill full segment
+        fillSegment(animationState.segIndex, 1);
+        animationState.segIndex++;
+      }
+      if(animationState.segIndex >= currentTimeline.length){
+        // finished
+        animationState.playing = false;
+        updatePlayButton();
+        highlightSegment(null);
+        return;
+      }
+      // fill partial for current seg
+      const seg = currentTimeline[animationState.segIndex];
+      const segStart = seg.start;
+      const segEnd = seg.end;
+      const segDuration = seg.duration || (segEnd - segStart);
+      const elapsedIntoSeg = Math.max(0, animationState.simCursor - segStart);
+      let frac = Math.min(1, segDuration > 0 ? elapsedIntoSeg / segDuration : 1);
+      fillSegment(animationState.segIndex, frac);
+      highlightSegment(currentTimeline[animationState.segIndex].pidNum || null);
+      // schedule next frame
+      animTimer = requestAnimationFrame(tickAnimation);
+    }
+
+    function fillSegment(idx, fraction){
+      const segEl = ganttContainer.querySelector(`.gantt-seg[data-index="${idx}"]`);
+      if(!segEl) return;
+      const fill = segEl.querySelector('.fill');
+      if(fill) fill.style.width = (fraction*100).toFixed(2) + '%';
+      // mark running class when > 0 and <1
+      segEl.classList.toggle('running', fraction > 0 && fraction < 1);
+      if(fraction === 1) segEl.classList.remove('running');
+    }
+
+    function unhighlightAllRows(){
+      const rows = resultTableBody.querySelectorAll('tr');
+      rows.forEach(r=> r.classList.remove('highlight'));
+    }
+
+    function highlightSegment(pid){
+      unhighlightAllRows();
+      if(!pid) return;
+      const row = document.getElementById(`proc-row-${pid}`);
+      if(row) row.classList.add('highlight');
+    }
+
+    // Clear any fills and highlights (used on stop)
+    function resetEverything(){
+      resetGanttFill();
+      unhighlightAllRows();
+      animationState.segIndex = 0;
+      animationState.simCursor = animationState.simStartTime;
+      animationState.playing = false;
+      updatePlayButton();
+      if(animTimer){ cancelAnimationFrame(animTimer); animTimer = null; }
+    }
+
+    // ---------- CSV Export ----------
+    function exportCSV(){
+      if(!currentTimeline || currentTimeline.length===0){
+        alert('Run a simulation first to export results.');
+        return;
+      }
+      // Build CSV of process table
+      const headers = ['PID','Arrival','Burst','Priority','Start','Finish','Waiting','Turnaround'];
+      const rows = [];
+      const trs = resultTableBody.querySelectorAll('tr');
+      trs.forEach(tr=>{
+        const cols = Array.from(tr.querySelectorAll('td')).map(td => td.textContent);
+        rows.push(cols);
+      });
+      let csv = headers.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cpu_scheduler_results.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // ---------- Utilities ----------
+    function resetGanttAndMetrics(){
+      ganttContainer.innerHTML = '';
+      avgWaitingEl.textContent = '-';
+      avgTurnEl.textContent = '-';
+      resultTableBody.innerHTML = '';
+      hidePlayControls();
+    }
+
+    function hidePlayControls(){ playControls.style.display = 'none'; }
+
+    // Initialize
+    hidePlayControls();
+    animationState.speed = Number(speedRange.value)/100;
+    speedLabel.textContent = animationState.speed.toFixed(2) + '×';
+
+    // ---------- End of script ----------
+  </script>
+</body>
+</html>
